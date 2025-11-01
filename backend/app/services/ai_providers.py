@@ -1,79 +1,86 @@
 import os
-import httpx
 import base64
+import logging
+import httpx
 from dotenv import load_dotenv
+from typing import Dict, Any
 
-# Load environment variables
 load_dotenv()
 
-# ===== ENV KEYS =====
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 CLIPDROP_API_KEY = os.getenv("CLIPDROP_API_KEY")
 
-# ===== DEFAULT GROQ MODEL =====
+if not GROQ_API_KEY or not CLIPDROP_API_KEY:
+    raise RuntimeError("❌ Missing required API keys (GROQ_API_KEY / CLIPDROP_API_KEY).")
+
+logger = logging.getLogger("ai_providers")
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
+
 GROQ_DEFAULT_MODEL = "llama-3.1-8b-instant"
 
-# ===== GROQ CHAT FUNCTION =====
-async def generate_chat_response(prompt: str):
+
+class AIProvider:
     """
-    Sends a text prompt to Groq API and returns the chat completion.
+    Secure, async, high-performance integration with Groq and ClipDrop APIs.
     """
-    url = "https://api.groq.com/openai/v1/chat/completions"
 
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    def __init__(self):
+        self.groq_api_key = GROQ_API_KEY
+        self.clipdrop_api_key = CLIPDROP_API_KEY
+        self.groq_model = GROQ_DEFAULT_MODEL
 
-    data = {
-        "model": GROQ_DEFAULT_MODEL,
-        "messages": [{"role": "user", "content": prompt}]
-    }
+        self._groq_client = httpx.AsyncClient(
+            headers={
+                "Authorization": f"Bearer {self.groq_api_key}",
+                "Content-Type": "application/json"
+            },
+            timeout=httpx.Timeout(30.0, read=60.0)
+        )
+        self._clipdrop_client = httpx.AsyncClient(
+            headers={"x-api-key": self.clipdrop_api_key},
+            timeout=httpx.Timeout(30.0, read=60.0)
+        )
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(url, headers=headers, json=data)
+        logger.info("✅ AIProvider initialized successfully.")
 
-    if response.status_code != 200:
-        return {"error": response.text}
+    async def close(self):
+        await self._groq_client.aclose()
+        await self._clipdrop_client.aclose()
+        logger.info("🧹 AIProvider clients closed cleanly.")
 
-    result = response.json()
-    return {
-        "provider": "Groq",
-        "response": result["choices"][0]["message"]["content"]
-    }
+    async def generate_chat_response(self, prompt: str) -> Dict[str, Any]:
+        if not prompt:
+            return {"error": "Prompt is required"}
 
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        payload = {"model": self.groq_model, "messages": [{"role": "user", "content": prompt}]}
 
-# ===== CLIPDROP IMAGE GENERATION =====
-async def generate_image(prompt: str):
-    """
-    Sends a text prompt to ClipDrop API to generate an image.
-    Returns image as a base64 string.
-    """
-    if not prompt:
-        return {"success": False, "message": "Prompt is required"}
+        try:
+            response = await self._groq_client.post(url, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            return {"provider": "Groq", "response": content}
+        except Exception as e:
+            logger.error(f"Groq API error: {e}")
+            return {"error": str(e)}
 
-    try:
+    async def generate_image(self, prompt: str) -> Dict[str, Any]:
+        if not prompt:
+            return {"success": False, "message": "Prompt is required"}
+
         url = "https://clipdrop-api.co/text-to-image/v1"
-        headers = {"x-api-key": CLIPDROP_API_KEY}
-
-        # ClipDrop expects multipart/form-data with a 'prompt' field
         files = {"prompt": (None, prompt, "text/plain")}
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, headers=headers, files=files)
-
-        if response.status_code != 200:
-            return {"success": False, "message": response.text}
-
-        # Convert raw image bytes to Base64
-        base64_image = base64.b64encode(response.content).decode("utf-8")
-        result_image = f"data:image/png;base64,{base64_image}"
-
-        return {
-            "success": True,
-            "message": "Image generated successfully",
-            "resultImage": result_image
-        }
-
-    except Exception as e:
-        return {"success": False, "message": str(e)}
+        try:
+            response = await self._clipdrop_client.post(url, files=files)
+            response.raise_for_status()
+            base64_image = base64.b64encode(response.content).decode("utf-8")
+            return {
+                "success": True,
+                "message": "Image generated successfully",
+                "resultImage": f"data:image/png;base64,{base64_image}"
+            }
+        except Exception as e:
+            logger.error(f"ClipDrop API error: {e}")
+            return {"success": False, "message": str(e)}
