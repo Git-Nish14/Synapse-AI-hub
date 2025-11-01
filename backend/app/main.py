@@ -5,5 +5,3 @@ app = FastAPI()
 
 app.include_router(chat.router, prefix="/api")
 app.include_router(image.router, prefix="/api")
-
-

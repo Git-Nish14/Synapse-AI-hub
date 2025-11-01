@@ -3,20 +3,20 @@ import httpx
 import base64
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
 # ===== ENV KEYS =====
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-CLIPDROP_API_KEY = os.getenv("CLIPDROP_API")
+CLIPDROP_API_KEY = os.getenv("CLIPDROP_API_KEY")
 
-# ===== DEFAULT MODELS =====
+# ===== DEFAULT GROQ MODEL =====
 GROQ_DEFAULT_MODEL = "llama-3.1-8b-instant"
 
-
-# ===== CHAT FUNCTION =====
+# ===== GROQ CHAT FUNCTION =====
 async def generate_chat_response(prompt: str):
     """
-    Sends a prompt to Groq API and returns the chat response.
+    Sends a text prompt to Groq API and returns the chat completion.
     """
     url = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -37,13 +37,16 @@ async def generate_chat_response(prompt: str):
         return {"error": response.text}
 
     result = response.json()
-    return {"provider": "Groq", "response": result["choices"][0]["message"]["content"]}
+    return {
+        "provider": "Groq",
+        "response": result["choices"][0]["message"]["content"]
+    }
 
 
-# ===== IMAGE FUNCTION =====
+# ===== CLIPDROP IMAGE GENERATION =====
 async def generate_image(prompt: str):
     """
-    Sends a prompt to ClipDrop API to generate an image.
+    Sends a text prompt to ClipDrop API to generate an image.
     Returns image as a base64 string.
     """
     if not prompt:
@@ -53,10 +56,8 @@ async def generate_image(prompt: str):
         url = "https://clipdrop-api.co/text-to-image/v1"
         headers = {"x-api-key": CLIPDROP_API_KEY}
 
-        # ClipDrop expects 'files' for the prompt
-        files = {
-            "prompt": (None, prompt, "text/plain")
-        }
+        # ClipDrop expects multipart/form-data with a 'prompt' field
+        files = {"prompt": (None, prompt, "text/plain")}
 
         async with httpx.AsyncClient() as client:
             response = await client.post(url, headers=headers, files=files)
@@ -64,13 +65,13 @@ async def generate_image(prompt: str):
         if response.status_code != 200:
             return {"success": False, "message": response.text}
 
-        # Convert raw image bytes to base64
+        # Convert raw image bytes to Base64
         base64_image = base64.b64encode(response.content).decode("utf-8")
         result_image = f"data:image/png;base64,{base64_image}"
 
         return {
             "success": True,
-            "message": "Image Generated",
+            "message": "Image generated successfully",
             "resultImage": result_image
         }
 
