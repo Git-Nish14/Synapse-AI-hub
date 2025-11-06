@@ -25,6 +25,9 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     is_premium = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    stripe_customer_id = Column(String(255), nullable=True, unique=True)
+    is_premium = Column(Boolean, default=False)
+    premium_expires_at = Column(DateTime(timezone=True), nullable=True)
 
     plan_id = Column(Integer, ForeignKey("credit_plans.id"), default=1)  # default = Free
     plan = relationship("CreditPlan", back_populates="users")

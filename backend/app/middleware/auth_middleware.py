@@ -23,7 +23,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # ✅ Protect /api and /users routes
-        protected_routes = ("/api", "/users")
+        protected_routes = ("/api", "/users", "/credits", "/payments")
 
         if path.startswith(protected_routes):
             auth_header = request.headers.get("Authorization")

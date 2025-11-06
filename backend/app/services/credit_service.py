@@ -3,10 +3,9 @@ from sqlalchemy.orm import Session
 from app.db import models
 
 def reset_credits_if_needed(credit: models.Credit):
-    now = datetime.now(timezone.utc)  # ✅ always timezone-aware
+    now = datetime.now(timezone.utc)
     last_reset = credit.last_reset
 
-    # Make last_reset timezone-aware if it's naive
     if last_reset.tzinfo is None:
         last_reset = last_reset.replace(tzinfo=timezone.utc)
 
@@ -14,23 +13,22 @@ def reset_credits_if_needed(credit: models.Credit):
     if now - last_reset >= timedelta(hours=1):
         credit.chat_credits = 10
 
-    # Reset image credits daily
+    # Reset image daily
     if now.date() != last_reset.date():
         credit.image_credits = 5
 
     # Reset for new year
     if now.year != last_reset.year:
-        credit.image_credits = 5
         credit.chat_credits = 10
+        credit.image_credits = 5
 
     credit.last_reset = now
-
 
 def deduct_credit(db: Session, user: models.User, type: str):
     if user.is_premium:
         return  # Premium users have unlimited credits
 
-    credit = user.credits[0]
+    credit = user.credits[0]  # Ensure user always has a credit row
     reset_credits_if_needed(credit)
 
     if type == "chat":
@@ -40,6 +38,5 @@ def deduct_credit(db: Session, user: models.User, type: str):
     elif type == "image":
         if credit.image_credits <= 0:
             raise Exception("No image credits left.")
-        credit.image_credits -= 1
 
     db.commit()
