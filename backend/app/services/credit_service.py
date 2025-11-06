@@ -1,19 +1,25 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from app.db import models
 
 def reset_credits_if_needed(credit: models.Credit):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)  # ✅ always timezone-aware
+    last_reset = credit.last_reset
+
+    # Make last_reset timezone-aware if it's naive
+    if last_reset.tzinfo is None:
+        last_reset = last_reset.replace(tzinfo=timezone.utc)
+
     # Reset chat every hour
-    if now - credit.last_reset >= timedelta(hours=1):
+    if now - last_reset >= timedelta(hours=1):
         credit.chat_credits = 10
 
     # Reset image credits daily
-    if now.date() != credit.last_reset.date():
+    if now.date() != last_reset.date():
         credit.image_credits = 5
 
     # Reset for new year
-    if now.year != credit.last_reset.year:
+    if now.year != last_reset.year:
         credit.image_credits = 5
         credit.chat_credits = 10
 
